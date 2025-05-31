@@ -1,50 +1,170 @@
-# Building a Remote MCP Server on Cloudflare (Without Auth)
+# BlockchainHB Remote MCP Server
 
-This example allows you to deploy a remote MCP server that doesn't require authentication on Cloudflare Workers. 
+This remote MCP server runs on Cloudflare Workers and provides powerful tools including LinkedIn job scraping capabilities powered by Apify.
 
-## Get started: 
+## 🚀 Available Tools
 
-[![Deploy to Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-authless)
+### 1. **Calculator Tools**
+- `add` - Simple addition (a + b)
+- `calculate` - Multi-operation calculator (add, subtract, multiply, divide)
 
-This will deploy your MCP server to a URL like: `remote-mcp-server-authless.<your-account>.workers.dev/sse`
+### 2. **LinkedIn Jobs Scraper** 🔥
+- `scrape_linkedin_jobs` - Search and extract LinkedIn job listings using the [bebity/linkedin-jobs-scraper](https://apify.com/bebity/linkedin-jobs-scraper) actor
 
-Alternatively, you can use the command line below to get the remote MCP Server created on your local machine:
-```bash
-npm create cloudflare@latest -- my-mcp-server --template=cloudflare/ai/demos/remote-mcp-authless
+#### LinkedIn Jobs Scraper Parameters:
+- **jobTitle** (required): Job title to search for (e.g., "Software Engineer", "Marketing Manager")
+- **location** (optional): Location for the job search (e.g., "San Francisco, CA", "Remote")
+- **companyName** (optional): Array of company names to filter by
+- **experienceLevel** (optional): Filter by experience level (Internship, Entry level, Associate, Mid-Senior level, Director, Executive)
+- **jobType** (optional): Employment type filter (Full-time, Part-time, Contract, Temporary, Volunteer, Internship, Other)
+- **maxResults** (optional): Maximum number of jobs to return (1-100, default: 10)
+
+#### Example Usage:
+```javascript
+// Search for Software Engineer jobs in San Francisco
+scrape_linkedin_jobs({
+  jobTitle: "Software Engineer",
+  location: "San Francisco, CA",
+  experienceLevel: "Mid-Senior level",
+  jobType: "Full-time",
+  maxResults: 20
+})
+
+// Search for Marketing jobs at specific companies
+scrape_linkedin_jobs({
+  jobTitle: "Marketing Manager",
+  companyName: ["Google", "Microsoft", "Apple"],
+  maxResults: 15
+})
 ```
 
-## Customizing your MCP Server
+#### Output Format:
+Each job listing includes:
+- Job title and company name
+- Location and posting date
+- Direct link to the job posting
+- Salary information (when available)
+- Workplace type (Remote/On-site/Hybrid)
+- Number of applicants
 
-To add your own [tools](https://developers.cloudflare.com/agents/model-context-protocol/tools/) to the MCP server, define each tool inside the `init()` method of `src/index.ts` using `this.server.tool(...)`. 
+## 🌐 **Deployment**
 
-## Connect to Cloudflare AI Playground
+### **One-Click Deploy:**
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/BlockchainHB/remote-mcp-server-authless)
 
-You can connect to your MCP server from the Cloudflare AI Playground, which is a remote MCP client:
+This will deploy your MCP server to: `https://remote-mcp-server-authless.<your-account>.workers.dev/sse`
 
-1. Go to https://playground.ai.cloudflare.com/
-2. Enter your deployed MCP server URL (`remote-mcp-server-authless.<your-account>.workers.dev/sse`)
-3. You can now use your MCP tools directly from the playground!
+### **Manual Deployment:**
+```bash
+npm create cloudflare@latest -- my-linkedin-mcp-server --template=BlockchainHB/remote-mcp-server-authless
+cd my-linkedin-mcp-server
+npm run deploy
+```
 
-## Connect Claude Desktop to your MCP server
+## 🔧 **Configuration**
 
-You can also connect to your remote MCP server from local MCP clients, by using the [mcp-remote proxy](https://www.npmjs.com/package/mcp-remote). 
+### **Environment Variables:**
+The server requires an Apify API key for LinkedIn job scraping functionality:
+- `APIFY_API_KEY`: Your Apify API token
 
-To connect to your MCP server from Claude Desktop, follow [Anthropic's Quickstart](https://modelcontextprotocol.io/quickstart/user) and within Claude Desktop go to Settings > Developer > Edit Config.
+## 🔌 **Connect to MCP Clients**
 
-Update with this configuration:
+### **Method 1: Remote Connection (Recommended)**
+Add to your MCP client configuration:
 
 ```json
 {
   "mcpServers": {
-    "calculator": {
+    "linkedin-jobs": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://localhost:8787/sse"  // or remote-mcp-server-authless.your-account.workers.dev/sse
+        "https://remote-mcp-server-authless.hasaamfba.workers.dev/sse"
       ]
     }
   }
 }
 ```
 
-Restart Claude and you should see the tools become available. 
+### **Method 2: Direct Actor Access**
+You can also use Apify's built-in MCP server:
+
+```json
+{
+  "mcpServers": {
+    "linkedin-jobs-direct": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@apify/actors-mcp-server",
+        "--actors",
+        "bebity/linkedin-jobs-scraper"
+      ],
+      "env": {
+        "APIFY_TOKEN": "your_apify_api_key"
+      }
+    }
+  }
+}
+```
+
+## 🎯 **Use Cases**
+
+### **For Job Seekers:**
+- Search for specific roles in target locations
+- Monitor job postings at dream companies
+- Track application counts and posting dates
+- Find remote opportunities
+
+### **For Recruiters:**
+- Research salary ranges and competition
+- Identify active companies in specific markets
+- Track job posting trends
+- Find similar roles for benchmarking
+
+### **For Market Research:**
+- Analyze job market trends
+- Identify growing companies and sectors
+- Track hiring patterns
+- Competitive intelligence
+
+## 📊 **Cost & Performance**
+- **Actor Cost**: ~$0.06 per 1,000 jobs scraped
+- **Speed**: Scrapes 1,000 jobs in under 2 minutes
+- **Success Rate**: >99% based on Apify actor statistics
+- **Built-in Proxy**: Uses residential proxies for reliability
+
+## 🛠️ **Development**
+
+To customize your MCP server, edit the tools in `src/index.ts`. Each tool is defined using the MCP SDK:
+
+```typescript
+this.server.tool(
+  "your_tool_name",
+  { 
+    param1: z.string(),
+    param2: z.number().optional()
+  },
+  async ({ param1, param2 }) => {
+    // Your tool logic here
+    return { content: [{ type: "text", text: "Result" }] };
+  }
+);
+```
+
+## 📚 **Resources**
+
+- [Apify LinkedIn Jobs Scraper](https://apify.com/bebity/linkedin-jobs-scraper)
+- [Model Context Protocol Documentation](https://modelcontextprotocol.io/)
+- [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
+- [MCP Remote Proxy](https://www.npmjs.com/package/mcp-remote)
+
+## 🚀 **Powered By**
+- **Cloudflare Workers** - Serverless hosting
+- **Apify Platform** - Web scraping infrastructure  
+- **Model Context Protocol** - AI agent integration
+- **bebity/linkedin-jobs-scraper** - LinkedIn job extraction
+
+---
+
+**Need help?** Open an issue or check the [Cloudflare MCP documentation](https://developers.cloudflare.com/agents/guides/remote-mcp-server/).
