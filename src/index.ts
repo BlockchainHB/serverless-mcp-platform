@@ -9,7 +9,7 @@ export class MyMCP extends McpAgent {
 		version: "1.0.0",
 	});
 
-	async init() {
+	async init(env?: any) {
 		// Simple addition tool
 		this.server.tool(
 			"add",
@@ -69,6 +69,9 @@ export class MyMCP extends McpAgent {
 			},
 			async ({ jobTitle, location, companyName, experienceLevel, jobType, maxResults }) => {
 				try {
+					// Get the API key from environment (hard-coded for this demo)
+					const APIFY_API_KEY = "apify_api_WnbWHgBUR6xR7F5JeVGQwXcQEokbPR2dhmpq";
+					
 					// Prepare the input for the Apify actor
 					const actorInput: any = {
 						jobTitle,
@@ -91,7 +94,7 @@ export class MyMCP extends McpAgent {
 					const response = await fetch(`https://api.apify.com/v2/acts/bebity~linkedin-jobs-scraper/runs`, {
 						method: 'POST',
 						headers: {
-							'Authorization': `Bearer ${env.APIFY_API_KEY}`,
+							'Authorization': `Bearer ${APIFY_API_KEY}`,
 							'Content-Type': 'application/json',
 						},
 						body: JSON.stringify(actorInput)
@@ -119,7 +122,7 @@ export class MyMCP extends McpAgent {
 						
 						const statusResponse = await fetch(`https://api.apify.com/v2/acts/bebity~linkedin-jobs-scraper/runs/${runId}`, {
 							headers: {
-								'Authorization': `Bearer ${env.APIFY_API_KEY}`,
+								'Authorization': `Bearer ${APIFY_API_KEY}`,
 							}
 						});
 
@@ -142,7 +145,7 @@ export class MyMCP extends McpAgent {
 					// Get the results
 					const resultsResponse = await fetch(`https://api.apify.com/v2/acts/bebity~linkedin-jobs-scraper/runs/${runId}/dataset/items`, {
 						headers: {
-							'Authorization': `Bearer ${env.APIFY_API_KEY}`,
+							'Authorization': `Bearer ${APIFY_API_KEY}`,
 						}
 					});
 
