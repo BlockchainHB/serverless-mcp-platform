@@ -2,9 +2,9 @@ name: Deploy to Cloudflare Workers
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   deploy:
@@ -18,10 +18,13 @@ jobs:
         with:
           node-version: '18'
           
+      - name: Delete package-lock.json if exists
+        run: rm -f package-lock.json
+          
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-package-lock
         
-      - name: Deploy to Cloudflare Workers
+      - name: Deploy with Wrangler
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
