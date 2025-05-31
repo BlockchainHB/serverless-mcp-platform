@@ -1,5 +1,6 @@
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ApifyClient } from "apify-client";
 import { z } from "zod";
 
 // Define our MCP agent with tools
@@ -9,7 +10,7 @@ export class MyMCP extends McpAgent {
 		version: "1.0.0",
 	});
 
-	async init(env?: any) {
+	async init() {
 		// Simple addition tool
 		this.server.tool(
 			"add",
@@ -56,111 +57,55 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		// LinkedIn Jobs Scraper tool
+		// LinkedIn Jobs Scraper tool using proper ApifyClient
 		this.server.tool(
 			"scrape_linkedin_jobs",
 			{
 				jobTitle: z.string().describe("Job title to search for (e.g., 'Software Engineer', 'Marketing Manager')"),
 				location: z.string().optional().describe("Location for the job search (e.g., 'San Francisco, CA', 'Remote')"),
 				companyName: z.array(z.string()).optional().describe("Array of company names to filter by"),
+				companyId: z.array(z.string()).optional().describe("Array of LinkedIn company IDs to filter by"),
 				experienceLevel: z.enum(["Internship", "Entry level", "Associate", "Mid-Senior level", "Director", "Executive"]).optional().describe("Experience level filter"),
 				jobType: z.enum(["Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship", "Other"]).optional().describe("Employment type filter"),
 				maxResults: z.number().min(1).max(100).default(10).describe("Maximum number of jobs to return (1-100)")
 			},
-			async ({ jobTitle, location, companyName, experienceLevel, jobType, maxResults }) => {
+			async ({ jobTitle, location, companyName, companyId, experienceLevel, jobType, maxResults }) => {
 				try {
-					// Get the API key from environment (hard-coded for this demo)
-					const APIFY_API_KEY = "apify_api_WnbWHgBUR6xR7F5JeVGQwXcQEokbPR2dhmpq";
-					
-					// Prepare the input for the Apify actor
-					const actorInput: any = {
-						jobTitle,
-						maxResults,
+					// Initialize the ApifyClient with API token
+					const client = new ApifyClient({
+						token: 'apify_api_WnbWHgBUR6xR7F5JeVGQwXcQEokbPR2dhmpq',
+					});
+
+					// Prepare Actor input using the correct format
+					const input: any = {
+						title: jobTitle || "",
+						location: location || "United States",
+						rows: maxResults,
+						proxy: {
+							useApifyProxy: true,
+							apifyProxyGroups: ["RESIDENTIAL"]
+						}
 					};
 
 					// Add optional parameters if provided
-					if (location) actorInput.location = location;
-					if (companyName && companyName.length > 0) actorInput.companyName = companyName;
-					if (experienceLevel) actorInput.experienceLevel = experienceLevel;
-					if (jobType) actorInput.jobType = jobType;
-
-					// Use Apify proxy for better success rates
-					actorInput.proxy = {
-						useApifyProxy: true,
-						apifyProxyGroups: ["RESIDENTIAL"]
-					};
-
-					// Call the Apify actor
-					const response = await fetch(`https://api.apify.com/v2/acts/bebity~linkedin-jobs-scraper/runs`, {
-						method: 'POST',
-						headers: {
-							'Authorization': `Bearer ${APIFY_API_KEY}`,
-							'Content-Type': 'application/json',
-						},
-						body: JSON.stringify(actorInput)
-					});
-
-					if (!response.ok) {
-						return {
-							content: [{
-								type: "text",
-								text: `Error: Failed to start LinkedIn job scraper. Status: ${response.status}`
-							}]
-						};
+					if (companyName && companyName.length > 0) {
+						input.companyName = companyName;
+					}
+					
+					if (companyId && companyId.length > 0) {
+						input.companyId = companyId;
 					}
 
-					const runData = await response.json();
-					const runId = runData.data.id;
+					// Note: The actor doesn't seem to support experienceLevel and jobType filters
+					// based on the example input format provided
 
-					// Wait for the run to complete (with timeout)
-					let attempts = 0;
-					const maxAttempts = 60; // 5 minutes timeout
-					let runStatus = 'RUNNING';
+					// Run the Actor and wait for it to finish using the correct actor ID
+					const run = await client.actor("BHzefUZlZRKWxkTck").call(input);
 
-					while (runStatus === 'RUNNING' && attempts < maxAttempts) {
-						await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-						
-						const statusResponse = await fetch(`https://api.apify.com/v2/acts/bebity~linkedin-jobs-scraper/runs/${runId}`, {
-							headers: {
-								'Authorization': `Bearer ${APIFY_API_KEY}`,
-							}
-						});
+					// Fetch Actor results from the run's dataset
+					const { items } = await client.dataset(run.defaultDatasetId).listItems();
 
-						if (statusResponse.ok) {
-							const statusData = await statusResponse.json();
-							runStatus = statusData.data.status;
-						}
-						attempts++;
-					}
-
-					if (runStatus !== 'SUCCEEDED') {
-						return {
-							content: [{
-								type: "text",
-								text: `Job scraping did not complete successfully. Status: ${runStatus}. This might be due to LinkedIn blocking or timeout.`
-							}]
-						};
-					}
-
-					// Get the results
-					const resultsResponse = await fetch(`https://api.apify.com/v2/acts/bebity~linkedin-jobs-scraper/runs/${runId}/dataset/items`, {
-						headers: {
-							'Authorization': `Bearer ${APIFY_API_KEY}`,
-						}
-					});
-
-					if (!resultsResponse.ok) {
-						return {
-							content: [{
-								type: "text",
-								text: `Error fetching results. Status: ${resultsResponse.status}`
-							}]
-						};
-					}
-
-					const jobs = await resultsResponse.json();
-
-					if (!jobs || jobs.length === 0) {
+					if (!items || items.length === 0) {
 						return {
 							content: [{
 								type: "text",
@@ -170,18 +115,32 @@ export class MyMCP extends McpAgent {
 					}
 
 					// Format the results
-					const formattedJobs = jobs.slice(0, maxResults).map((job: any, index: number) => {
+					const formattedJobs = items.slice(0, maxResults).map((job: any, index: number) => {
 						const jobInfo = [
-							`**${index + 1}. ${job.title || 'N/A'}**`,
-							`🏢 **Company:** ${job.companyName || 'N/A'}`,
-							`📍 **Location:** ${job.location || 'N/A'}`,
-							`⏰ **Posted:** ${job.postedAt ? new Date(job.postedAt).toLocaleDateString() : 'N/A'}`,
-							`🔗 **Link:** ${job.link || 'N/A'}`,
+							`**${index + 1}. ${job.title || job.jobTitle || 'N/A'}**`,
+							`🏢 **Company:** ${job.companyName || job.company || 'N/A'}`,
+							`📍 **Location:** ${job.location || job.jobLocation || 'N/A'}`,
+							`⏰ **Posted:** ${job.publishedAt || job.postedAt || job.datePosted || 'N/A'}`,
+							`🔗 **Link:** ${job.jobUrl || job.url || job.link || 'N/A'}`,
 						];
 
-						if (job.salary) jobInfo.push(`💰 **Salary:** ${job.salary}`);
-						if (job.workplaceType) jobInfo.push(`🏠 **Type:** ${job.workplaceType}`);
-						if (job.applicantsCount) jobInfo.push(`👥 **Applicants:** ${job.applicantsCount}`);
+						// Add optional fields if they exist
+						if (job.salary || job.salaryRange) {
+							jobInfo.push(`💰 **Salary:** ${job.salary || job.salaryRange}`);
+						}
+						if (job.jobType || job.employmentType) {
+							jobInfo.push(`🏠 **Type:** ${job.jobType || job.employmentType}`);
+						}
+						if (job.applicants || job.applicantsCount) {
+							jobInfo.push(`👥 **Applicants:** ${job.applicants || job.applicantsCount}`);
+						}
+						if (job.description) {
+							// Truncate description to first 200 characters
+							const shortDesc = job.description.length > 200 
+								? job.description.substring(0, 200) + "..." 
+								: job.description;
+							jobInfo.push(`📄 **Description:** ${shortDesc}`);
+						}
 						
 						return jobInfo.join('\n');
 					}).join('\n\n---\n\n');
@@ -189,7 +148,7 @@ export class MyMCP extends McpAgent {
 					return {
 						content: [{
 							type: "text",
-							text: `# LinkedIn Jobs Search Results\n\n**Search Query:** "${jobTitle}"${location ? ` in ${location}` : ''}\n**Found:** ${jobs.length} jobs (showing ${Math.min(maxResults, jobs.length)})\n\n${formattedJobs}`
+							text: `# LinkedIn Jobs Search Results\n\n**Search Query:** "${jobTitle}"${location ? ` in ${location}` : ''}\n**Found:** ${items.length} jobs (showing ${Math.min(maxResults, items.length)})\n\n${formattedJobs}`
 						}]
 					};
 
