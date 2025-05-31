@@ -24,5 +24,8 @@
 	},
 	"observability": {
 		"enabled": true
+	},
+	"vars": {
+		"APIFY_API_KEY": "apify_api_WnbWHgBUR6xR7F5JeVGQwXcQEokbPR2dhmpq"
 	}
 }
