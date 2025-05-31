@@ -96,9 +96,6 @@ export class MyMCP extends McpAgent {
 						input.companyId = companyId;
 					}
 
-					// Note: The actor doesn't seem to support experienceLevel and jobType filters
-					// based on the example input format provided
-
 					// Run the Actor and wait for it to finish using the correct actor ID
 					const run = await client.actor("BHzefUZlZRKWxkTck").call(input);
 
@@ -157,6 +154,104 @@ export class MyMCP extends McpAgent {
 						content: [{
 							type: "text",
 							text: `Error scraping LinkedIn jobs: ${error.message}`
+						}]
+					};
+				}
+			}
+		);
+
+		// Indeed Jobs Scraper tool using misceres/indeed-scraper
+		this.server.tool(
+			"scrape_indeed_jobs",
+			{
+				position: z.string().describe("Job position to search for (e.g., 'web developer', 'marketing manager')"),
+				country: z.string().default("US").describe("Country code (e.g., 'US', 'CA', 'UK', 'DE')"),
+				location: z.string().optional().describe("Location for the job search (e.g., 'San Francisco', 'New York', 'Remote')"),
+				maxItems: z.number().min(1).max(100).default(50).describe("Maximum number of jobs to return (1-100)"),
+				parseCompanyDetails: z.boolean().default(false).describe("Whether to parse detailed company information"),
+				saveOnlyUniqueItems: z.boolean().default(true).describe("Whether to save only unique job items"),
+				followApplyRedirects: z.boolean().default(false).describe("Whether to follow apply redirects for more details")
+			},
+			async ({ position, country, location, maxItems, parseCompanyDetails, saveOnlyUniqueItems, followApplyRedirects }) => {
+				try {
+					// Initialize the ApifyClient with API token
+					const client = new ApifyClient({
+						token: 'apify_api_WnbWHgBUR6xR7F5JeVGQwXcQEokbPR2dhmpq',
+					});
+
+					// Prepare Actor input using the correct format for Indeed scraper
+					const input: any = {
+						position,
+						country,
+						maxItems,
+						parseCompanyDetails,
+						saveOnlyUniqueItems,
+						followApplyRedirects
+					};
+
+					// Add location if provided
+					if (location) {
+						input.location = location;
+					}
+
+					// Run the Indeed Actor and wait for it to finish
+					const run = await client.actor("hMvNSpz3JnHgl5jkh").call(input);
+
+					// Fetch Actor results from the run's dataset
+					const { items } = await client.dataset(run.defaultDatasetId).listItems();
+
+					if (!items || items.length === 0) {
+						return {
+							content: [{
+								type: "text",
+								text: `No jobs found for "${position}"${location ? ` in ${location}` : ` in ${country}`}. Try different search terms or location.`
+							}]
+						};
+					}
+
+					// Format the results
+					const formattedJobs = items.slice(0, maxItems).map((job: any, index: number) => {
+						const jobInfo = [
+							`**${index + 1}. ${job.positionName || job.title || job.jobTitle || 'N/A'}**`,
+							`🏢 **Company:** ${job.company || job.companyName || 'N/A'}`,
+							`📍 **Location:** ${job.location || job.jobLocation || 'N/A'}`,
+							`⏰ **Posted:** ${job.postedAt || job.datePosted || job.posted || 'N/A'}`,
+							`🔗 **Link:** ${job.url || job.jobUrl || job.link || 'N/A'}`,
+						];
+
+						// Add optional fields if they exist
+						if (job.salary || job.salaryRange || job.estimatedSalary) {
+							jobInfo.push(`💰 **Salary:** ${job.salary || job.salaryRange || job.estimatedSalary}`);
+						}
+						if (job.jobType || job.employmentType || job.schedule) {
+							jobInfo.push(`🏠 **Type:** ${job.jobType || job.employmentType || job.schedule}`);
+						}
+						if (job.rating || job.companyRating) {
+							jobInfo.push(`⭐ **Company Rating:** ${job.rating || job.companyRating}`);
+						}
+						if (job.description) {
+							// Truncate description to first 200 characters
+							const shortDesc = job.description.length > 200 
+								? job.description.substring(0, 200) + "..." 
+								: job.description;
+							jobInfo.push(`📄 **Description:** ${shortDesc}`);
+						}
+						
+						return jobInfo.join('\n');
+					}).join('\n\n---\n\n');
+
+					return {
+						content: [{
+							type: "text",
+							text: `# Indeed Jobs Search Results\n\n**Search Query:** "${position}"${location ? ` in ${location}` : ` in ${country}`}\n**Found:** ${items.length} jobs (showing ${Math.min(maxItems, items.length)})\n\n${formattedJobs}`
+						}]
+					};
+
+				} catch (error) {
+					return {
+						content: [{
+							type: "text",
+							text: `Error scraping Indeed jobs: ${error.message}`
 						}]
 					};
 				}
