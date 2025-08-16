@@ -26,6 +26,6 @@
 		"enabled": true
 	},
 	"vars": {
-		"APIFY_API_KEY": "apify_api_WnbWHgBUR6xR7F5JeVGQwXcQEokbPR2dhmpq"
+		"APIFY_API_KEY": "your_apify_api_key_here"
 	}
 }
